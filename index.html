@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Management</title>
+</head>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        display: flex;
+        height: 100vh;
+    }
+
+    .container {
+        display: flex;
+        width: 100%;
+    }
+
+    .side-menu {
+        background-color: #2c3e50;
+        color: white;
+        width: 200px;
+        padding: 20px;
+    }
+
+    .side-menu h2 {
+        margin-top: 0;
+    }
+
+    .side-menu ul {
+        list-style-type: none;
+        padding: 0;
+    }
+
+    .side-menu li {
+        margin: 15px 0;
+    }
+
+    .side-menu a {
+        color: rgb(0, 0, 0);
+        text-decoration: none;
+    }
+
+    main {
+        flex-grow: 1;
+        padding: 20px;
+    }
+
+    .task-input {
+        margin-bottom: 20px;
+    }
+
+    .task-input input,
+    .task-input select {
+        padding: 10px;
+        width: calc(100% - 22px); /* Full width minus padding */
+        margin-bottom: 10px; /* Space between inputs */
+        border: 1px solid #ccc; /* Consistent border */
+        border-radius: 4px; /* Rounded corners */
+        font-size: 16px; /* Consistent font size */
+        box-sizing: border-box; /* Include padding and border in width calculation */
+    }
+
+    .task-input button {
+        padding: 10px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+
+    th, td {
+        border: 1px solid #ccc;
+        padding: 10px;
+        text-align: left;
+    }
+
+    th {
+        background-color: #f2f2f2;
+    }
+
+    .done {
+        text-decoration: line-through;
+        color: gray;
+    }
+
+</style>
+<body>
+    <div class="container">
+        <nav class="side-menu">
+            <h2>Menu</h2>
+            <ul>
+                <li><a href="#tasks">Tasks</a></li>
+                <li><a href="#about">About</a></li>
+            </ul>
+        </nav>
+        <main>
+            <div id="tasks">
+                <h1>Task Management</h1>
+                <div class="task-input">
+                    <input type="text" id="taskNameInput" placeholder="Task name">
+                    <input type="text" id="taskDescriptionInput" placeholder="Task description">
+                    <select id="taskStatusInput">
+                        <option value="" disabled selected>Status</option>
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                    <select id="taskPriorityInput">
+                        <option value="" disabled selected>Priority</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                    </select>
+                    <input type="date" id="taskDeadlineInput">
+                    <button id="addTaskButton" onclick="addTask()">Add Task</button>
+                </div>
+
+                <h2>Pending Tasks</h2>
+                <table id="pendingTable">
+                    <thead>
+                        <tr>
+                            <th>Task Name</th>
+                            <th>Description</th>
+                            <th>Priority</th>
+                            <th>Deadline</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pendingTableBody"></tbody>
+                </table>
+
+                <h2>In Progress Tasks</h2>
+                <table id="inProgressTable">
+                    <thead>
+                        <tr>
+                            <th>Task Name</th>
+                            <th>Description</th>
+                            <th>Priority</th>
+                            <th>Deadline</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inProgressTableBody"></tbody>
+                </table>
+
+                <h2>Completed Tasks</h2>
+                <table id="completedTable">
+                    <thead>
+                        <tr>
+                            <th>Task Name</th>
+                            <th>Description</th>
+                            <th>Priority</th>
+                            <th>Deadline</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="completedTableBody"></tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+    <script>
+        let currentEditRow = null; // To keep track of the row being edited
+        let isEditing = false; // To track if we are in editing mode
+        let previousStatus = ""; // To keep track of the previous status
+
+        function addTask() {
+            const taskName = document.getElementById('taskNameInput').value.trim();
+            const taskDescription = document.getElementById('taskDescriptionInput').value.trim();
+            const taskStatus = document.getElementById('taskStatusInput').value;
+            const taskPriority = document.getElementById('taskPriorityInput').value;
+            const taskDeadline = document.getElementById('taskDeadlineInput').value;
+
+            if (taskName && taskDescription && taskStatus && taskPriority && taskDeadline) {
+                let taskTableBody;
+                // Determine which table to add/update the task
+                switch (taskStatus) {
+                    case "Pending":
+                        taskTableBody = document.getElementById('pendingTableBody');
+                        break;
+                    case "In Progress":
+                        taskTableBody = document.getElementById('inProgressTableBody');
+                        break;
+                    case "Completed":
+                        taskTableBody = document.getElementById('completedTableBody');
+                        break;
+                    default:
+                        return;
+                }
+
+                if (isEditing && currentEditRow) {
+                    // If editing, update the row content
+                    const cells = currentEditRow.cells;
+
+                    // Store the previous status to handle table change
+                    previousStatus = cells[1].innerText; // Assuming cells[1] is Status
+                    cells[0].innerText = taskName;
+                    cells[1].innerText = taskDescription;
+                    cells[2].innerText = taskPriority;
+                    cells[3].innerText = taskDeadline;
+
+                    // If the status has changed, move the row to the new table
+                    if (taskStatus !== previousStatus) {
+                        removeTask(currentEditRow); // Remove from current table
+                        addToTable(taskStatus, taskName, taskDescription, taskPriority, taskDeadline);
+                    }
+
+                    // Reset editing state
+                    isEditing = false;
+                    currentEditRow = null;
+                    document.getElementById('addTaskButton').innerText = "Add Task"; // Change button text back
+                } else {
+                    // Create a new row
+                    addToTable(taskStatus, taskName, taskDescription, taskPriority, taskDeadline);
+                }
+
+                // Clear the input fields
+                clearInputFields();
+            } else {
+                alert("Please fill in all fields.");
+            }
+        }
+
+        function addToTable(status, taskName, taskDescription, taskPriority, taskDeadline) {
+            let taskTableBody;
+            switch (status) {
+                case "Pending":
+                    taskTableBody = document.getElementById('pendingTableBody');
+                    break;
+                case "In Progress":
+                    taskTableBody = document.getElementById('inProgressTableBody');
+                    break;
+                case "Completed":
+                    taskTableBody = document.getElementById('completedTableBody');
+                    break;
+            }
+
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${taskName}</td>
+                             <td>${taskDescription}</td>
+                             <td>${taskPriority}</td>
+                             <td>${taskDeadline}</td>
+                             <td>
+                                 <button onclick="markAsDone(this)">Done</button>
+                                 <button onclick="editTask(this)">Edit</button>
+                                 <button onclick="removeTask(this)">Remove</button>
+                             </td>`;
+            taskTableBody.appendChild(row);
+        }
+
+        function markAsDone(button) {
+            const row = button.parentElement.parentElement;
+            const cells = row.cells;
+
+            // Move the task to the completed table
+            const completedTableBody = document.getElementById('completedTableBody');
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `<td>${cells[0].innerText}</td>
+                                <td>${cells[1].innerText}</td>
+                                <td>${cells[2].innerText}</td>
+                                <td>${cells[3].innerText}</td>
+                                <td>
+                                    <button onclick="removeTask(this)">Remove</button>
+                                </td>`;
+            completedTableBody.appendChild(newRow);
+            row.parentElement.removeChild(row);
+        }
+
+        function editTask(button) {
+            currentEditRow = button.parentElement.parentElement; // Store the row being edited
+            document.getElementById('taskNameInput').value = currentEditRow.cells[0].innerText;
+            document.getElementById('taskDescriptionInput').value = currentEditRow.cells[1].innerText;
+            document.getElementById('taskPriorityInput').value = currentEditRow.cells[2].innerText;
+            document.getElementById('taskDeadlineInput').value = currentEditRow.cells[3].innerText;
+            document.getElementById('taskStatusInput').value = getCurrentTaskStatus(currentEditRow);
+            isEditing = true; // Set editing state
+            document.getElementById('addTaskButton').innerText = "Update Task"; // Change button text
+        }
+
+        function getCurrentTaskStatus(row) {
+            const taskName = row.cells[0].innerText;
+            // Check which table the task is in to determine its current status
+            if (document.getElementById('pendingTableBody').contains(row)) {
+                return "Pending";
+            } else if (document.getElementById('inProgressTableBody').contains(row)) {
+                return "In Progress";
+            } else if (document.getElementById('completedTableBody').contains(row)) {
+                return "Completed";
+            }
+            return "";
+        }
+
+        function removeTask(button) {
+            const row = button.parentElement.parentElement;
+            row.parentElement.removeChild(row);
+        }
+
+        function clearInputFields() {
+            document.getElementById('taskNameInput').value = '';
+            document.getElementById('taskDescriptionInput').value = '';
+            document.getElementById('taskPriorityInput').selectedIndex = 0; // Reset dropdown
+            document.getElementById('taskDeadlineInput').value = ''; // Reset date
+            document.getElementById('taskStatusInput').selectedIndex = 0; // Reset dropdown
+        }
+
+    </script>
+</body>
+</html>
