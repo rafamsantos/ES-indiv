@@ -91,13 +91,6 @@
 </style>
 <body>
     <div class="container">
-        <nav class="side-menu">
-            <h2>Menu</h2>
-            <ul>
-                <li><a href="#tasks">Tasks</a></li>
-                <li><a href="#about">About</a></li>
-            </ul>
-        </nav>
         <main>
             <div id="tasks">
                 <h1>Task Management</h1>
@@ -119,6 +112,17 @@
                     <input type="date" id="taskDeadlineInput">
                     <button id="addTaskButton" onclick="addTask()">Add Task</button>
                 </div>
+
+      
+                <!-- sorting options -->
+                <div class="task-input">
+                  <!-- Add Sort By Due Date Dropdown -->
+                  <select id="sortByDueDate" onchange="loadTasks()">
+                      <option value="asc">Sort by Due Date (Closest)</option>
+                      <option value="desc">Sort by Due Date (Farthest)</option>
+                  </select>
+                </div>
+              
 
                 <h2>Pending Tasks</h2>
                 <table id="pendingTable">
@@ -165,149 +169,240 @@
         </main>
     </div>
     <script>
-        let currentEditRow = null; // To keep track of the row being edited
-        let isEditing = false; // To track if we are in editing mode
-        let previousStatus = ""; // To keep track of the previous status
+  // Function to add a task
+  function addTask() {
+    // Capture data from input fields
+    const taskData = {
+        taskName: document.getElementById('taskNameInput').value,
+        taskDescription: document.getElementById('taskDescriptionInput').value,
+        taskStatus: document.getElementById('taskStatusInput').value,
+        taskPriority: document.getElementById('taskPriorityInput').value,
+        taskDeadline: document.getElementById('taskDeadlineInput').value
+    };
 
-        function addTask() {
-            const taskName = document.getElementById('taskNameInput').value.trim();
-            const taskDescription = document.getElementById('taskDescriptionInput').value.trim();
-            const taskStatus = document.getElementById('taskStatusInput').value;
-            const taskPriority = document.getElementById('taskPriorityInput').value;
-            const taskDeadline = document.getElementById('taskDeadlineInput').value;
+    // Define the API endpoint URL
+    const apiUrl = 'https://5397piytr7.execute-api.us-east-1.amazonaws.com/prod/'; // Replace with your API URL
 
-            if (taskName && taskDescription && taskStatus && taskPriority && taskDeadline) {
-                let taskTableBody;
-                // Determine which table to add/update the task
-                switch (taskStatus) {
-                    case "Pending":
-                        taskTableBody = document.getElementById('pendingTableBody');
-                        break;
-                    case "In Progress":
-                        taskTableBody = document.getElementById('inProgressTableBody');
-                        break;
-                    case "Completed":
-                        taskTableBody = document.getElementById('completedTableBody');
-                        break;
-                    default:
-                        return;
-                }
+    // Send a POST request to the API
+    fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ body: JSON.stringify(taskData) })  // Nested JSON format required by Lambda
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Success:', data);
+        alert('Task added successfully!');
+        clearInputs();  // Clear input fields after adding
+        loadTasks();    // Reload the tasks after adding
+    })
+    .catch((error) => {
+        console.error('Error:', error);
+        alert('Failed to add task!');
+    });
+}
 
-                if (isEditing && currentEditRow) {
-                    // If editing, update the row content
-                    const cells = currentEditRow.cells;
+  // Function to clear the input fields
+  function clearInputs() {
+    document.getElementById('taskNameInput').value = '';
+    document.getElementById('taskDescriptionInput').value = '';
+    document.getElementById('taskStatusInput').value = '';
+    document.getElementById('taskPriorityInput').value = '';
+    document.getElementById('taskDeadlineInput').value = '';
+  }
 
-                    // Store the previous status to handle table change
-                    previousStatus = cells[1].innerText; // Assuming cells[1] is Status
-                    cells[0].innerText = taskName;
-                    cells[1].innerText = taskDescription;
-                    cells[2].innerText = taskPriority;
-                    cells[3].innerText = taskDeadline;
+  function loadTasks() {
+    const apiUrl = 'https://5397piytr7.execute-api.us-east-1.amazonaws.com/prod/'; // Replace with your API URL
+    const sortOrder = document.getElementById('sortByDueDate').value;  // Get selected sort option
 
-                    // If the status has changed, move the row to the new table
-                    if (taskStatus !== previousStatus) {
-                        removeTask(currentEditRow); // Remove from current table
-                        addToTable(taskStatus, taskName, taskDescription, taskPriority, taskDeadline);
-                    }
+    fetch(apiUrl)
+    .then(response => response.json())
+    .then(data => {
+        const responseBody = JSON.parse(data.body);
 
-                    // Reset editing state
-                    isEditing = false;
-                    currentEditRow = null;
-                    document.getElementById('addTaskButton').innerText = "Add Task"; // Change button text back
-                } else {
-                    // Create a new row
-                    addToTable(taskStatus, taskName, taskDescription, taskPriority, taskDeadline);
-                }
-
-                // Clear the input fields
-                clearInputFields();
-            } else {
-                alert("Please fill in all fields.");
-            }
+        if (responseBody.tasks) {
+            // Sort the tasks based on the selected sort order (ascending or descending)
+            const sortedTasks = sortTasksByDueDate(responseBody.tasks, sortOrder);
+            populateTable(sortedTasks);  // Populate table with sorted tasks
+        } else {
+            console.error('No tasks found in the response');
         }
+    })
+    .catch(error => {
+        console.error('Error fetching tasks:', error);
+    });
+  }
 
-        function addToTable(status, taskName, taskDescription, taskPriority, taskDeadline) {
-            let taskTableBody;
-            switch (status) {
-                case "Pending":
-                    taskTableBody = document.getElementById('pendingTableBody');
-                    break;
-                case "In Progress":
-                    taskTableBody = document.getElementById('inProgressTableBody');
-                    break;
-                case "Completed":
-                    taskTableBody = document.getElementById('completedTableBody');
-                    break;
-            }
+  function sortTasksByDueDate(tasks, sortOrder) {
+      return tasks.sort((a, b) => {
+          const dateA = new Date(a.taskDeadline);
+          const dateB = new Date(b.taskDeadline);
+          
+          // Sort in ascending order
+          if (sortOrder === 'asc') {
+              return dateA - dateB;
+          } else {
+              // Sort in descending order
+              return dateB - dateA;
+          }
+      });
+  }
 
-            const row = document.createElement('tr');
-            row.innerHTML = `<td>${taskName}</td>
-                             <td>${taskDescription}</td>
-                             <td>${taskPriority}</td>
-                             <td>${taskDeadline}</td>
-                             <td>
-                                 <button onclick="markAsDone(this)">Done</button>
-                                 <button onclick="editTask(this)">Edit</button>
-                                 <button onclick="removeTask(this)">Remove</button>
-                             </td>`;
-            taskTableBody.appendChild(row);
+
+  // Function to populate the table with tasks
+  function populateTable(tasks) {
+    const pendingTableBody = document.getElementById('pendingTableBody');
+    const inProgressTableBody = document.getElementById('inProgressTableBody');
+    const completedTableBody = document.getElementById('completedTableBody');
+
+    // Clear existing rows
+    pendingTableBody.innerHTML = '';
+    inProgressTableBody.innerHTML = '';
+    completedTableBody.innerHTML = '';
+
+    tasks.forEach(task => {
+        const taskRow = document.createElement('tr');
+        taskRow.innerHTML = `
+            <td>${task.taskName}</td>
+            <td>${task.taskDescription}</td>
+            <td>${task.taskPriority}</td>
+            <td>${task.taskDeadline}</td>
+            <td>
+                <button onclick="editTask('${task.taskName}', '${task.taskDescription}', '${task.taskStatus}', '${task.taskPriority}', '${task.taskDeadline}')">Edit</button>
+                <button onclick="deleteTask('${task.taskName}')">Delete</button>
+            </td>
+        `;
+
+        if (task.taskStatus === 'Pending') {
+            pendingTableBody.appendChild(taskRow);
+        } else if (task.taskStatus === 'In Progress') {
+            inProgressTableBody.appendChild(taskRow);
+        } else if (task.taskStatus === 'Completed') {
+            completedTableBody.appendChild(taskRow);
         }
+    });
+}
 
-        function markAsDone(button) {
-            const row = button.parentElement.parentElement;
-            const cells = row.cells;
 
-            // Move the task to the completed table
-            const completedTableBody = document.getElementById('completedTableBody');
-            const newRow = document.createElement('tr');
-            newRow.innerHTML = `<td>${cells[0].innerText}</td>
-                                <td>${cells[1].innerText}</td>
-                                <td>${cells[2].innerText}</td>
-                                <td>${cells[3].innerText}</td>
-                                <td>
-                                    <button onclick="removeTask(this)">Remove</button>
-                                </td>`;
-            completedTableBody.appendChild(newRow);
-            row.parentElement.removeChild(row);
-        }
+  function editTask(name, description, status, priority, deadline) {
+      document.getElementById('taskNameInput').value = name;
+      document.getElementById('taskNameInput').readOnly = true; // Make task name read-only
+      document.getElementById('taskDescriptionInput').value = description;
+      document.getElementById('taskStatusInput').value = status;
+      document.getElementById('taskPriorityInput').value = priority;
+      document.getElementById('taskDeadlineInput').value = deadline;
 
-        function editTask(button) {
-            currentEditRow = button.parentElement.parentElement; // Store the row being edited
-            document.getElementById('taskNameInput').value = currentEditRow.cells[0].innerText;
-            document.getElementById('taskDescriptionInput').value = currentEditRow.cells[1].innerText;
-            document.getElementById('taskPriorityInput').value = currentEditRow.cells[2].innerText;
-            document.getElementById('taskDeadlineInput').value = currentEditRow.cells[3].innerText;
-            document.getElementById('taskStatusInput').value = getCurrentTaskStatus(currentEditRow);
-            isEditing = true; // Set editing state
-            document.getElementById('addTaskButton').innerText = "Update Task"; // Change button text
-        }
+      // Change the "Add Task" button to "Update Task"
+      const addTaskButton = document.getElementById('addTaskButton');
+      addTaskButton.innerText = 'Update Task';
+      addTaskButton.onclick = function() {
+          updateTask(name);  // Pass the original task name to identify the task
+      };
+  }
 
-        function getCurrentTaskStatus(row) {
-            const taskName = row.cells[0].innerText;
-            // Check which table the task is in to determine its current status
-            if (document.getElementById('pendingTableBody').contains(row)) {
-                return "Pending";
-            } else if (document.getElementById('inProgressTableBody').contains(row)) {
-                return "In Progress";
-            } else if (document.getElementById('completedTableBody').contains(row)) {
-                return "Completed";
-            }
-            return "";
-        }
+    
 
-        function removeTask(button) {
-            const row = button.parentElement.parentElement;
-            row.parentElement.removeChild(row);
-        }
+  function updateTask(originalTaskName) {
+    // Capture updated data from input fields
+    const updatedTaskData = {
+        taskName: document.getElementById('taskNameInput').value,
+        taskDescription: document.getElementById('taskDescriptionInput').value,
+        taskStatus: document.getElementById('taskStatusInput').value,
+        taskPriority: document.getElementById('taskPriorityInput').value,
+        taskDeadline: document.getElementById('taskDeadlineInput').value
+    };
 
-        function clearInputFields() {
-            document.getElementById('taskNameInput').value = '';
-            document.getElementById('taskDescriptionInput').value = '';
-            document.getElementById('taskPriorityInput').selectedIndex = 0; // Reset dropdown
-            document.getElementById('taskDeadlineInput').value = ''; // Reset date
-            document.getElementById('taskStatusInput').selectedIndex = 0; // Reset dropdown
-        }
+    const apiUrl = 'https://5397piytr7.execute-api.us-east-1.amazonaws.com/prod/';
 
-    </script>
+    fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            body: JSON.stringify({
+                originalTaskName: originalTaskName, // Identify the task by the original name
+                updatedTaskData: updatedTaskData
+            })
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Task updated successfully:', data);
+        alert('Task updated successfully!');
+        clearInputs();
+        loadTasks();
+
+        // Change "Update Task" button back to "Add Task" and reset read-only
+        const addTaskButton = document.getElementById('addTaskButton');
+        addTaskButton.innerText = 'Add Task';
+        addTaskButton.onclick = addTask;
+        document.getElementById('taskNameInput').readOnly = false;  // Enable editing of task name
+    })
+    .catch(error => {
+        console.error('Error updating task:', error);
+        alert('Failed to update task!');
+    });
+  }
+
+
+  // Function to delete a task
+  function deleteTask(taskName) {
+      const apiUrl = `https://5397piytr7.execute-api.us-east-1.amazonaws.com/prod/`;
+
+      fetch(apiUrl, {
+          method: 'DELETE',
+          headers: {
+              'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+              body: JSON.stringify({
+                  message: taskName
+              })
+          })
+      })
+      .then(response => response.json())
+      .then(data => {
+          console.log(data);  // Log the response to check what the server returns
+          if (data.body && !data.error) {
+              // If deletion was successful, call loadTasks to refresh the task list
+              loadTasks();  
+          } else {
+              console.error('Error deleting task:', data.error);
+          }
+      })
+      .catch(error => console.error('Error:', error));
+  }
+
+
+
+  // Function to delete a task (example)
+  /*function deleteTask(taskId) {
+    const apiUrl = `https://your-api-id.execute-api.us-east-1.amazonaws.com/prod/delete-task/${taskId}`; // Your API URL for deleting a task
+    fetch(apiUrl, {
+      method: 'DELETE',
+    })
+    .then(response => response.json())
+    .then(data => {
+      console.log('Task deleted:', data);
+      loadTasks(); // Reload tasks after deleting
+    })
+    .catch(error => {
+      console.error('Error deleting task:', error);
+    });
+  }
+
+  // Load tasks when the page is loaded
+  window.onload = function() {
+    loadTasks(); // Fetch and display tasks
+  };*/
+  window.onload = function() {
+    loadTasks();  // Load tasks when the page loads
+}
+
+</script>
+
 </body>
 </html>
